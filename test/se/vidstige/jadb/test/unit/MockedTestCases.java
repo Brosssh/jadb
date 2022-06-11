@@ -12,17 +12,54 @@ import se.vidstige.jadb.test.fakes.FakeAdbServer;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.List;
+import java.util.Scanner;
 
 public class MockedTestCases {
 
     private FakeAdbServer server;
     private JadbConnection connection;
+
+    private static long parseDate(String date) throws ParseException {
+        DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm");
+        return dateFormat.parse(date).getTime();
+    }
+
+    private static void assertHasFile(String expPath, int expSize, long expModifyTime, List<RemoteFile> actualFiles) {
+        for (RemoteFile file : actualFiles) {
+            if (expPath.equals(file.getPath())) {
+                if (file.isDirectory()) {
+                    Assert.fail("File " + expPath + " was listed as a dir!");
+                } else if (expSize != file.getSize() || expModifyTime != file.getLastModified()) {
+                    Assert.fail("File " + expPath + " exists but has incorrect properties!");
+                } else {
+                    return;
+                }
+            }
+        }
+        Assert.fail("File " + expPath + " could not be found!");
+    }
+
+    private static void assertHasDir(String expPath, long expModifyTime, List<RemoteFile> actualFiles) {
+        for (RemoteFile file : actualFiles) {
+            if (expPath.equals(file.getPath())) {
+                if (!file.isDirectory()) {
+                    Assert.fail("Dir " + expPath + " was listed as a file!");
+                } else if (expModifyTime != file.getLastModified()) {
+                    Assert.fail("Dir " + expPath + " exists but has incorrect properties!");
+                } else {
+                    return;
+                }
+            }
+        }
+        Assert.fail("Dir " + expPath + " could not be found!");
+    }
 
     @Before
     public void setUp() throws Exception {
@@ -131,6 +168,39 @@ public class MockedTestCases {
     }
 
     @Test
+    public void testExecuteShellProtocol() throws Exception {
+        server.add("serial-123");
+        server.expectShell("serial-123", "ls -l").returns(buildStream(null, null, 0));
+        server.expectShell("serial-123", "ls foobar").returns(buildStream("123", "456", 0));
+        JadbDevice device = connection.getDevices().get(0);
+
+        Assert.assertEquals(device.shellProcessBuilder("ls", "-l").start().waitFor(), 0);
+
+        Process process = device.shellProcessBuilder("ls", "foobar").redirectErrorStream(true).start();
+        Assert.assertEquals(new Scanner(process.getInputStream()).useDelimiter("\\A").next(), "123456");
+        Assert.assertEquals(process.waitFor(), 0);
+    }
+
+    private String buildStream(String out, String err, int exitCode) throws Exception {
+        ByteArrayOutputStream os = new ByteArrayOutputStream();
+        DataOutputStream dos = new DataOutputStream(os);
+        if (out != null) {
+            os.write(1);
+            dos.writeInt(Integer.reverseBytes(out.length()));
+            os.write(out.getBytes(StandardCharsets.US_ASCII));
+        }
+        if (err != null) {
+            os.write(2);
+            dos.writeInt(Integer.reverseBytes(err.length()));
+            os.write(err.getBytes(StandardCharsets.US_ASCII));
+        }
+        os.write(3); // exitcode stream
+        dos.writeInt(Integer.reverseBytes(1));
+        os.write(exitCode);
+        return os.toString(StandardCharsets.US_ASCII.name());
+    }
+
+    @Test
     public void testFileList() throws Exception {
         server.add("serial-123");
         server.expectList("serial-123", "/sdcard/Documents")
@@ -149,40 +219,5 @@ public class MockedTestCases {
         assertHasFile("user_manual.pdf", 3000, 648649, files);
         assertHasFile("effective java vol. 7.epub", 0xCAFE, 0xBABE, files);
         assertHasFile("\uB9AC\uADF8 \uC624\uBE0C \uB808\uC804\uB4DC", 240, 9001, files);
-    }
-
-    private static long parseDate(String date) throws ParseException {
-        DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm");
-        return dateFormat.parse(date).getTime();
-    }
-
-    private static void assertHasFile(String expPath, int expSize, long expModifyTime, List<RemoteFile> actualFiles) {
-        for (RemoteFile file : actualFiles) {
-            if (expPath.equals(file.getPath())) {
-                if (file.isDirectory()) {
-                    Assert.fail("File " + expPath + " was listed as a dir!");
-                } else if (expSize != file.getSize() || expModifyTime != file.getLastModified()) {
-                    Assert.fail("File " + expPath + " exists but has incorrect properties!");
-                } else {
-                    return;
-                }
-            }
-        }
-        Assert.fail("File " + expPath + " could not be found!");
-    }
-
-    private static void assertHasDir(String expPath, long expModifyTime, List<RemoteFile> actualFiles) {
-        for (RemoteFile file : actualFiles) {
-            if (expPath.equals(file.getPath())) {
-                if (!file.isDirectory()) {
-                    Assert.fail("Dir " + expPath + " was listed as a file!");
-                } else if (expModifyTime != file.getLastModified()) {
-                    Assert.fail("Dir " + expPath + " exists but has incorrect properties!");
-                } else {
-                    return;
-                }
-            }
-        }
-        Assert.fail("Dir " + expPath + " could not be found!");
     }
 }
