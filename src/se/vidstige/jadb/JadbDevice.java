@@ -3,6 +3,7 @@ package se.vidstige.jadb;
 import se.vidstige.jadb.managers.Bash;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -78,6 +79,17 @@ public class JadbDevice {
         try (Transport transport = transportFactory.createTransport()) {
             send(transport, serial == null ? "host:get-state" : "host-serial:" + serial + ":get-state");
             return convertState(transport.readString());
+        }
+    }
+    
+    public Integer getSdkVersion() {
+        try (BufferedReader input = new BufferedReader(
+                new InputStreamReader(executeShell("getprop", "ro.build.version.sdk"), StandardCharsets.UTF_8))) {
+
+            String line = input.readLine();
+            return line != null ? Integer.valueOf(line.trim()) : null;
+        } catch (Exception e) {
+            return null;
         }
     }
 

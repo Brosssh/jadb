@@ -93,7 +93,7 @@ public class PackageManager {
     public static class InstallOption {
         private final StringBuilder stringBuilder = new StringBuilder();
 
-        InstallOption(String ... varargs) {
+        public InstallOption(String ... varargs) {
             String suffix = "";
             for(String str: varargs) {
                 stringBuilder.append(suffix).append(str);
