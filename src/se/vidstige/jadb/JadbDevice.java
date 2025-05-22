@@ -81,17 +81,6 @@ public class JadbDevice {
             return convertState(transport.readString());
         }
     }
-    
-    public Integer getSdkVersion() {
-        try (BufferedReader input = new BufferedReader(
-                new InputStreamReader(executeShell("getprop", "ro.build.version.sdk"), StandardCharsets.UTF_8))) {
-
-            String line = input.readLine();
-            return line != null ? Integer.valueOf(line.trim()) : null;
-        } catch (Exception e) {
-            return null;
-        }
-    }
 
     /** <p>Execute a shell command.</p>
      *
